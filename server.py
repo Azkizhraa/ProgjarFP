@@ -121,15 +121,12 @@ def process_round_end():
 
     if game_over:
         game_started = False
-        # Reset all player data for a completely new game
         for i in range(2):
             player_data[i].update({
                 "ready": False, "hp": INITIAL_HP, "choice": None, 
                 "hand": [], "username": f"Player {i}"
             })
 
-        # --- MODIFICATION ---
-        # Instead of going to a rematch screen, send clients back to the initial join screen.
         broadcast("game_state", {
             "message": "Game Over! Enter a name to play again.",
             "hps": {i: player_data[i]["hp"] for i in range(2)},

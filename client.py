@@ -343,9 +343,6 @@ def draw_game_screen(sw, sh, shake_offsets):
     if bg: screen.blit(pygame.transform.scale(bg, (sw, sh)), (0, 0))
     else: screen.fill(DARK_GRAY)
 
-    # --- MODIFICATION ---
-    # The game_over screen is now the final screen before the server resets the state.
-    # No button is needed here anymore.
     if game_over:
         end_bg = win_screen_img if local_player_won else lose_screen_img
         if end_bg: screen.blit(pygame.transform.scale(end_bg, (sw, sh)), (0, 0))
@@ -458,7 +455,6 @@ def receive_messages():
                     game_message, player_hps, round_status = msg_data["message"], msg_data["hps"], msg_data["round_status"]
                     if "usernames" in msg_data: player_names = msg_data["usernames"]
                     
-                    # When server puts us back in 'entering_username', reset the game over state
                     if round_status == "entering_username": 
                         username = ""
                         game_over = False 
@@ -571,9 +567,6 @@ def game_loop():
                     if not game_over and insta_win_rect.collidepoint(mouse_pos):
                         send_message("insta_win", {})
                         continue 
-                    
-                    # --- MODIFICATION ---
-                    # Removed click handler for the rematch button as it no longer exists.
 
                     if round_status == "waiting_for_choices":
                         for card in player_hand:
