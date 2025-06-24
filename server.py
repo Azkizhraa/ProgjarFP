@@ -4,7 +4,7 @@ import pickle
 import time
 import random
 
-# --- Game Configuration ---
+# --- Game Config ---
 HOST = '0.0.0.0'
 PORT = 65432
 HEADER_LENGTH = 10
@@ -26,8 +26,8 @@ ALL_POSSIBLE_CARDS = [
     {"rps_value": 2, "effect": "counter_damage_5"},
 ]
 
-# --- Game State Variables ---
-clients = {}  # {conn: player_id}
+# ---  Variables ---
+clients = {}  
 player_data = {
     0: {"username": "Player 0", "ready": False, "hp": INITIAL_HP, "choice": None, "hand": []},
     1: {"username": "Player 1", "ready": False, "hp": INITIAL_HP, "choice": None, "hand": []}
@@ -35,7 +35,7 @@ player_data = {
 game_started = False
 clients_lock = threading.Lock()
 
-# --- Networking Helper Functions ---
+
 def send_pickled(conn, data_object):
     """Sends a pickled object with a fixed-size header."""
     try:
@@ -54,7 +54,7 @@ def broadcast(message_type, data):
         for conn in list(clients.keys()):
             send_pickled(conn, message)
 
-# --- Game Logic Functions ---
+# Logic Function
 def deal_cards():
     """Deals a new hand of cards to each player."""
     for i in range(2):
@@ -121,12 +121,14 @@ def process_round_end():
 
     if game_over:
         game_started = False
+        # Reset for  new game
         for i in range(2):
             player_data[i].update({
                 "ready": False, "hp": INITIAL_HP, "choice": None, 
                 "hand": [], "username": f"Player {i}"
             })
 
+      
         broadcast("game_state", {
             "message": "Game Over! Enter a name to play again.",
             "hps": {i: player_data[i]["hp"] for i in range(2)},
@@ -174,7 +176,7 @@ def handle_disconnect(conn):
                 "usernames": {i: player_data[i]["username"] for i in range(2)}
             })
 
-# --- Main Client Handler Thread ---
+# --- Main Client--
 def handle_client(conn, player_id):
     global game_started
     try:
