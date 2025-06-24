@@ -7,12 +7,12 @@ import time
 import os
 import random
 
-# --- Network Configuration ---
+# --- Network Config ---
 SERVER_HOST = '127.0.0.1' 
 SERVER_PORT = 65432
 HEADER_LENGTH = 10 
 
-# --- Pygame Initialization ---
+
 pygame.init()
 
 # --- Screen Dimensions ---
@@ -22,7 +22,7 @@ screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE
 pygame.display.set_caption("RPS Game Client")
 fullscreen = False
 
-# --- Colors ---
+
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 GRAY = (200, 200, 200)
@@ -37,7 +37,7 @@ HP_GREEN = (0, 200, 0)
 SHADOW_COLOR = (50, 50, 50)
 GAME_OVER_RED = (249, 4, 4)
 
-# --- Fonts ---
+
 try:
     font_name = 'BADABB__.TTF'
     font_large = pygame.font.Font(font_name, 74)
@@ -55,7 +55,7 @@ except FileNotFoundError:
     font_large = pygame.font.Font(None, 74); font_medium = pygame.font.Font(None, 50); font_small = pygame.font.Font(None, 36); font_hp = pygame.font.Font(None, 28); font_card_name = pygame.font.Font(None, 28); font_card_effect = pygame.font.Font(None, 22); font_round_result = pygame.font.Font(None, 48); font_section_title = pygame.font.Font(None, 40); font_end_screen = pygame.font.Font(None, 150)
 
 
-# --- Game State Variables (Client-side) ---
+
 player_id = None
 game_message = "Connecting to server..."
 player_hps = {0: 100, 1: 100}
@@ -68,11 +68,11 @@ player_hand = []
 revealed_player_card_data = None
 revealed_opponent_card_data = None
 
-# --- Username Input State ---
+
 username = ""
 input_box_active = False
 
-# --- Animation State ---
+
 end_screen_text_scale = 0.0
 end_screen_animation_active = False
 end_screen_text_velocity = 0.0
@@ -84,7 +84,7 @@ hp_shake_info = {
     1: {"is_shaking": False, "duration": 0, "intensity": 4}
 }
 
-# --- UI and Game Constants ---
+
 INITIAL_HP = 100
 CHOICES_MAP = {0: "Rock", 1: "Paper", 2: "Scissors"}
 CARD_EFFECTS_DISPLAY = { "none": "No Effect", "power_attack": "Power Attack (20 Dmg)", "counter_damage_5": "Counter (5 Dmg if Lose)"}
@@ -92,10 +92,14 @@ NORMAL_SCALE, HOVER_SCALE, SCALE_SPEED = 1.0, 1.1, 0.08
 TILT_ANGLE = 10 
 TILT_SPEED = 0.1 
 
-# --- Asset Loading ---
+
 ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
 MAX_CARD_IMAGE_HEIGHT = 120
-card_images = { 0: {0: None, 1: None, 2: None}, 1: {0: None, 1: None, 2: None}, 'default': {0: None, 1: None, 2: None}}
+card_images = { 
+    'rock': {'power': {0: None, 1: None}, 'counter': {0: None, 1: None}, 'none': {0: None, 1: None}}, 
+    'paper': {'power': {0: None, 1: None}, 'counter': {0: None, 1: None}, 'none': {0: None, 1: None}}, 
+    'scissors': {'power': {0: None, 1: None}, 'counter': {0: None, 1: None}, 'none': {0: None, 1: None}} 
+}
 player_0_background, player_1_background = None, None
 win_screen_img, lose_screen_img = None, None
 hp_bar_bg_img, heart_icon_img = None, None
@@ -132,17 +136,25 @@ avatar1_img = load_and_scale_image('avatar1.png', 0)
 join_bg0_img = load_and_scale_image('join_bg0.png', 0)
 join_bg1_img = load_and_scale_image('join_bg1.png', 0) 
 
+# Load all cards
+for rps_type in ["rock", "paper", "scissors"]:
+    for player_id_suffix in [0, 1]:
+        # Load power attack images (e.g., rock_power0.png)
+        power_filename = f"{rps_type}_power{player_id_suffix}.png"
+        card_images[rps_type]['power'][player_id_suffix] = load_and_scale_image(power_filename, MAX_CARD_IMAGE_HEIGHT)
+        
+        # Load counter images (e.g., rock_counter0.png)
+        counter_filename = f"{rps_type}_counter{player_id_suffix}.png"
+        card_images[rps_type]['counter'][player_id_suffix] = load_and_scale_image(counter_filename, MAX_CARD_IMAGE_HEIGHT)
 
-for p_id in [0, 1, 'default']:
-    for rps_val in [0, 1, 2]:
-        suffix = str(p_id) if p_id != 'default' else ''
-        filename = f"{CHOICES_MAP[rps_val].lower()}{suffix}.png"
-        card_images[p_id][rps_val] = load_and_scale_image(filename, MAX_CARD_IMAGE_HEIGHT)
+        # Load standard images (e.g., rock0.png)
+        none_filename = f"{rps_type}{player_id_suffix}.png"
+        card_images[rps_type]['none'][player_id_suffix] = load_and_scale_image(none_filename, MAX_CARD_IMAGE_HEIGHT)
+
 
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 connected_to_server = False
 
-# --- Drawing Functions ---
 def draw_text_with_shadow(text, font, color, x, y, center=True, stroke=True):
     text_surface = font.render(text, True, color)
     shadow_surface = font.render(text, True, SHADOW_COLOR)
@@ -217,14 +229,35 @@ def draw_button(rect, text, font, color, text_color, hover_color=None):
     draw_text_with_shadow(text, font, text_color, rect.centerx, rect.centery)
     return is_hovered
 
-def draw_card_as_image_button(x, y, card_data, is_selected, is_clickable=True, extra_scale=1.0):
+# --- Card Drawing Function ---
+def draw_card_as_image_button(x, y, card_data, is_selected, owner_id=None, is_clickable=True, extra_scale=1.0):
+    # If a specific owner_id is not provided, default to the current client's player_id.
+    # This is useful for drawing the player's own hand.
+    id_to_use = owner_id if owner_id is not None else player_id
+
     rps_value = card_data["rps_value"]
-    effect_text = CARD_EFFECTS_DISPLAY.get(card_data["effect"], "Unknown")
+    effect = card_data["effect"]
+    
     card_name = CHOICES_MAP.get(rps_value, "???")
-    owner_id = card_data.get("owner", player_id) 
-    image_set = card_images.get(owner_id, card_images['default'])
-    base_image = image_set.get(rps_value, card_images['default'].get(rps_value))
-    if not base_image: return pygame.Rect(x, y, 0, 0)
+    rps_type = card_name.lower()
+    effect_text = CARD_EFFECTS_DISPLAY.get(effect, "Unknown")
+    
+    
+    if effect == "power_attack":
+        effect_key = "power"
+    elif effect == "counter_damage_5":
+        effect_key = "counter"
+    else: # This handles the "none" case
+        effect_key = "none"
+
+    
+    base_image = card_images.get(rps_type, {}).get(effect_key, {}).get(id_to_use)
+    
+
+    if not base_image: 
+        base_image = card_images.get(rps_type, {}).get("none", {}).get(id_to_use)
+        if not base_image:
+            return pygame.Rect(x, y, 0, 0)
     
     current_scale = card_data.get("current_scale", NORMAL_SCALE) * extra_scale
     current_tilt = card_data.get("current_tilt", 0)
@@ -389,13 +422,14 @@ def draw_game_screen(sw, sh, shake_offsets):
         draw_text_with_shadow(f"{player_names.get(1, 'Player 1')}'s Card", font_small, WHITE, sw/4, revealed_y_pos)
         draw_text_with_shadow(f"{player_names.get(0, 'Player 0')}'s Card", font_small, WHITE, sw * 3/4, revealed_y_pos)
         
-        p0_card = revealed_player_card_data if player_id == 0 else revealed_opponent_card_data
-        p1_card = revealed_opponent_card_data if player_id == 0 else revealed_player_card_data
+        p0_card_data = revealed_player_card_data if player_id == 0 else revealed_opponent_card_data
+        p1_card_data = revealed_opponent_card_data if player_id == 0 else revealed_player_card_data
 
-        if p0_card and p1_card:
-            p0_card["owner"] = 0; p1_card["owner"] = 1
-            draw_card_as_image_button(sw/4, revealed_y_pos + 25, p1_card, False, is_clickable=False, extra_scale=card_scale)
-            draw_card_as_image_button(sw * 3/4, revealed_y_pos + 25, p0_card, False, is_clickable=False, extra_scale=card_scale)
+        if p0_card_data and p1_card_data:
+           
+            draw_card_as_image_button(sw/4, revealed_y_pos + 25, p1_card_data, False, owner_id=1, is_clickable=False, extra_scale=card_scale)
+            # Player 0's card (right side of screen)
+            draw_card_as_image_button(sw * 3/4, revealed_y_pos + 25, p0_card_data, False, owner_id=0, is_clickable=False, extra_scale=card_scale)
     
     elif round_status in ["waiting_for_choices", "choice_made"]:
         draw_text_with_shadow(game_message, font_small, WHITE, sw / 2, content_start_y)
@@ -567,7 +601,7 @@ def game_loop():
                     if not game_over and insta_win_rect.collidepoint(mouse_pos):
                         send_message("insta_win", {})
                         continue 
-
+                    
                     if round_status == "waiting_for_choices":
                         for card in player_hand:
                             if "rect" in card and card["rect"] and card["rect"].collidepoint(mouse_pos):
